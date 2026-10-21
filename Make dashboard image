@@ -1,0 +1,197 @@
+"""Draw (1) an annotated wireframe and (2) a filled-in mock dashboard layout
+for a hospital administrator dashboard, using the simulated data from Weeks 2 and 3.
+
+Run:  python make_dashboard_images.py
+Output: images/wireframe.png, images/mock_dashboard.png
+Requires: numpy, pandas, matplotlib
+"""
+import json
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch, Rectangle
+import numpy as np
+import pandas as pd
+
+NAVY, BLUE, ORANGE, RED, GREEN, GREY, LIGHT = "#1F3864", "#2E75B6", "#ED7D31", "#C00000", "#548235", "#7F7F7F", "#F2F2F2"
+FIG = (12.8, 7.2)          # 16:9, canvas units are 16 x 9
+
+# Layout zones on a 16 x 9 canvas: (x, y, width, height)
+Z = {
+    1: (0.2, 8.0, 15.6, 0.85),                                   # header and filters
+    2: [(0.2 + i * 3.16, 6.55, 2.96, 1.3) for i in range(5)],    # five KPI cards
+    3: (0.2, 3.45, 9.7, 2.9),                                    # trend and forecast
+    4: (10.1, 3.45, 5.7, 2.9),                                   # readmission by diagnosis
+    5: (0.2, 0.2, 5.1, 3.05),                                    # length of stay by diagnosis
+    6: (5.5, 0.2, 4.9, 3.05),                                    # seasonality
+    7: (10.6, 0.2, 5.2, 3.05),                                   # insights and alerts
+}
+
+
+def base_canvas():
+    fig = plt.figure(figsize=FIG)
+    ax = fig.add_axes([0, 0, 1, 1]); ax.set_xlim(0, 16); ax.set_ylim(0, 9); ax.axis("off")
+    return fig, ax
+
+
+def box(ax, xywh, fc="white", ec="#BFBFBF", lw=1.2, ls="-"):
+    x, y, w, h = xywh
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.08", fc=fc, ec=ec, lw=lw, ls=ls))
+
+
+def badge(ax, x, y, n):
+    ax.add_patch(plt.Circle((x, y), 0.19, color=NAVY, zorder=5))
+    ax.text(x, y, str(n), color="white", ha="center", va="center", fontsize=11, fontweight="bold", zorder=6)
+
+
+def sub_axes(fig, xywh, pad=(0.5, 0.45, 0.2, 0.55)):
+    x, y, w, h = xywh
+    l, b, r, t = pad
+    return fig.add_axes([(x + l) / 16, (y + b) / 9, (w - l - r) / 16, (h - b - t) / 9])
+
+
+# =================================================================== WIREFRAME
+def wireframe():
+    fig, ax = base_canvas()
+    ax.add_patch(Rectangle((0, 0), 16, 9, color="#FAFAFA"))
+    box(ax, Z[1], fc="#D9E2F3", ec=NAVY)
+    ax.text(0.45, 8.42, "Dashboard title + data refresh date", fontsize=12, fontweight="bold", va="center", color=NAVY)
+    for i, lab in enumerate(["Period  v", "Department  v", "Age group  v", "Diagnosis  v"]):
+        x = 8.2 + i * 1.9
+        box(ax, (x, 8.2, 1.7, 0.45), fc="white", ec=NAVY)
+        ax.text(x + 0.85, 8.42, lab, ha="center", va="center", fontsize=10, color=NAVY)
+    badge(ax, 0.2, 8.7, 1)
+
+    kpi_txt = ["KPI 1\nAdmissions (year)\nvalue + trend arrow", "KPI 2\nAverage length of stay\nvalue + trend arrow",
+               "KPI 3\n30-day readmission rate\nvalue + status colour", "KPI 4\nForecast admissions\nnext year",
+               "KPI 5\nPeak bed demand\nforecast"]
+    for r, t in zip(Z[2], kpi_txt):
+        box(ax, r, fc="#EDEDED", ec=GREY)
+        ax.text(r[0] + r[2] / 2, r[1] + r[3] / 2, t, ha="center", va="center", fontsize=10, color="#404040", linespacing=1.5)
+    badge(ax, 0.2, 7.85, 2)
+
+    specs = [(3, "LINE CHART\nMonthly admissions with\n12-month trend line and\n95% forecast band", "line"),
+             (4, "HORIZONTAL BAR CHART\nReadmission rate by diagnosis,\nsorted high to low,\noverall rate as reference line", "bar"),
+             (5, "BAR CHART\nAverage length of stay\nby diagnosis", "bar"),
+             (6, "COLUMN CHART\nSeasonal index by month\n(100 = annual average)", "bar"),
+             (7, "TEXT PANEL\nAuto-generated insights\nand alerts with\nrecommended actions", "text")]
+    for n, t, kind in specs:
+        x, y, w, h = Z[n]
+        box(ax, Z[n], fc="#EDEDED", ec=GREY)
+        ax.text(x + w / 2, y + (h / 2 if kind == "text" else h * 0.70), t, ha="center", va="center", fontsize=11, color="#404040", linespacing=1.5)
+        if kind == "line":
+            xs = np.linspace(x + 0.6, x + w - 0.6, 30)
+            ax.plot(xs, y + 0.6 + 0.25 * np.sin(xs * 2.2) + (xs - xs[0]) * 0.05, color="#BFBFBF", lw=2)
+        elif kind == "bar":
+            for j in range(5):
+                ax.add_patch(Rectangle((x + 0.5 + j * (w - 1.0) / 5, y + 0.3), (w - 1.0) / 5 * 0.6, 0.2 + 0.12 * (5 - j), color="#D0D0D0"))
+    for n in range(3, 8):
+        badge(ax, Z[n][0], Z[n][1] + Z[n][3], n)
+
+    ax.text(8, 0.04, "WIREFRAME  |  16:9 landscape  |  numbered zones are described in Table 3", ha="center", fontsize=9, color=GREY)
+    fig.savefig("images/wireframe.png", dpi=150); plt.close(fig)
+
+
+# ================================================================ MOCK DASHBOARD
+def mock():
+    m = pd.read_csv("data/monthly_admissions.csv")
+    m["Date"] = pd.to_datetime(m["Month"] + "-01")
+    fc = pd.read_csv("data/forecast_2025.csv"); fc["Date"] = pd.to_datetime(fc["Month"] + "-01")
+    dg = pd.read_csv("data/diagnosis_metrics.csv")
+    S = json.load(open("data/forecast_summary.json"))
+    tot24 = int(m[m.Month.str.startswith("2024")].Admissions.sum()); tot23 = int(m[m.Month.str.startswith("2023")].Admissions.sum())
+    growth = (tot24 / tot23 - 1) * 100
+    overall_readmit = 29.5
+
+    fig, ax = base_canvas()
+    ax.add_patch(Rectangle((0, 0), 16, 9, color="#F4F6FA"))
+    box(ax, Z[1], fc=NAVY, ec=NAVY)
+    ax.text(0.45, 8.58, "Hospital Operations Dashboard", fontsize=16, fontweight="bold", color="white", va="center")
+    ax.text(0.45, 8.22, "Simulated data  |  Admissions 2019 to 2024, forecast 2025", fontsize=9.5, color="#D9E2F3", va="center")
+    for i, lab in enumerate(["Period: 2019-2024  v", "Department: All  v", "Age group: All  v", "Diagnosis: All  v"]):
+        x = 7.4 + i * 2.1
+        box(ax, (x, 8.2, 1.95, 0.45), fc="white", ec="white")
+        ax.text(x + 0.97, 8.42, lab, ha="center", va="center", fontsize=9, color=NAVY)
+
+    kpis = [("ADMISSIONS 2024", f"{tot24:,}", f"+{growth:.1f}% vs 2023", GREEN),
+            ("AVG LENGTH OF STAY", f"{S['alos_last12']:.1f} days", "last 12 months", GREY),
+            ("30-DAY READMISSION RATE", f"{overall_readmit}%", "Heart failure: 66%  (high)", RED),
+            ("FORECAST ADMISSIONS 2025", f"{S['forecast_2025_total']:,}", f"+{S['forecast_growth_vs_2024_pct']}% vs 2024", ORANGE),
+            ("PEAK BED DEMAND 2025", f"{S['beds_needed_peak_forecast']} beds", f"2024 peak: {S['beds_needed_2024_peak_actual']} beds", ORANGE)]
+    for r, (lab, val, sub, col) in zip(Z[2], kpis):
+        box(ax, r, fc="white", ec="#D0D0D0")
+        ax.add_patch(Rectangle((r[0], r[1] + 0.06), 0.09, r[3] - 0.12, color=col))
+        ax.text(r[0] + 0.25, r[1] + r[3] - 0.25, lab, fontsize=8.5, color=GREY, fontweight="bold", va="center")
+        ax.text(r[0] + 0.25, r[1] + 0.62, val, fontsize=20, color=NAVY, fontweight="bold", va="center")
+        ax.text(r[0] + 0.25, r[1] + 0.22, sub, fontsize=9, color=col, va="center", fontweight="bold")
+
+    for n in range(3, 8):
+        box(ax, Z[n], fc="white", ec="#D0D0D0")
+    plt.rcParams.update({"font.size": 8.5, "axes.spines.top": False, "axes.spines.right": False})
+
+    # 3: trend and forecast
+    a = sub_axes(fig, Z[3], pad=(0.6, 0.45, 0.25, 0.6))
+    a.plot(m["Date"], m["Admissions"], color=BLUE, lw=1.4, label="Observed")
+    a.plot(m["Date"], m["Admissions"].rolling(12, center=True).mean(), color=NAVY, lw=2.2, label="12-month trend")
+    a.plot(fc["Date"], fc["Forecast"], color=ORANGE, lw=2.2, label="Forecast 2025")
+    a.fill_between(fc["Date"], fc["Lower_95"], fc["Upper_95"], color=ORANGE, alpha=0.25)
+    a.axvspan(pd.Timestamp("2020-03-01"), pd.Timestamp("2020-06-30"), color=GREY, alpha=0.2)
+    a.annotate("Spring 2020\ndisruption", (pd.Timestamp("2020-05-01"), 830), fontsize=7.5, color=GREY, ha="center")
+    a.legend(frameon=False, fontsize=7.5, loc="upper left", ncol=3)
+    a.set_ylabel("Admissions / month", fontsize=8)
+    ax.text(Z[3][0] + 0.2, Z[3][1] + Z[3][3] - 0.3, "Monthly admissions: trend and 2025 forecast", fontsize=11, fontweight="bold", color=NAVY, va="center")
+
+    # 4: readmission by diagnosis
+    a = sub_axes(fig, Z[4], pad=(1.5, 0.45, 0.4, 0.6))
+    d = dg.sort_values("Readmission_Rate_Pct")
+    a.barh(d["Diagnosis"], d["Readmission_Rate_Pct"], color=[RED if v > 50 else BLUE for v in d["Readmission_Rate_Pct"]])
+    a.axvline(overall_readmit, color="black", ls="--", lw=1.2)
+    a.text(overall_readmit + 1, -0.45, f"overall {overall_readmit}%", fontsize=7.5)
+    for i, v in enumerate(d["Readmission_Rate_Pct"]):
+        a.text(v + 1, i, f"{v:.0f}%", va="center", fontsize=8)
+    a.set_xlim(0, 80); a.set_xlabel("Readmitted (%)", fontsize=8)
+    ax.text(Z[4][0] + 0.2, Z[4][1] + Z[4][3] - 0.3, "Readmission rate by diagnosis", fontsize=11, fontweight="bold", color=NAVY, va="center")
+
+    # 5: length of stay by diagnosis
+    a = sub_axes(fig, Z[5], pad=(0.6, 0.85, 0.25, 0.6))
+    d = dg.sort_values("Mean_LOS_Days", ascending=False)
+    a.bar(d["Diagnosis"], d["Mean_LOS_Days"], color=BLUE)
+    for i, v in enumerate(d["Mean_LOS_Days"]):
+        a.text(i, v + 0.15, f"{v:.1f}", ha="center", fontsize=8)
+    plt.setp(a.get_xticklabels(), rotation=30, ha="right", fontsize=8)
+    a.set_ylabel("Days", fontsize=8)
+    ax.text(Z[5][0] + 0.2, Z[5][1] + Z[5][3] - 0.3, "Average length of stay by diagnosis", fontsize=11, fontweight="bold", color=NAVY, va="center")
+
+    # 6: seasonal index (2021-2024 to avoid the 2020 disruption)
+    a = sub_axes(fig, Z[6], pad=(0.6, 0.55, 0.25, 0.6))
+    mm = m[m["Date"].dt.year >= 2021].copy()
+    mm["rel"] = mm["Admissions"] / mm.groupby(mm["Date"].dt.year)["Admissions"].transform("mean") * 100
+    idx = mm.groupby(mm["Date"].dt.month)["rel"].mean()
+    a.bar(range(1, 13), idx.values, color=[ORANGE if v > 100 else BLUE for v in idx.values])
+    a.axhline(100, color="black", lw=1)
+    a.set_xticks(range(1, 13)); a.set_xticklabels(list("JFMAMJJASOND"))
+    a.set_ylim(80, 115); a.set_ylabel("Index (100 = average)", fontsize=8)
+    ax.text(Z[6][0] + 0.2, Z[6][1] + Z[6][3] - 0.3, "Seasonal pattern, 2021 to 2024", fontsize=11, fontweight="bold", color=NAVY, va="center")
+
+    # 7: insights panel
+    x, y, w, h = Z[7]
+    ax.text(x + 0.2, y + h - 0.3, "Insights and alerts", fontsize=11, fontweight="bold", color=NAVY, va="center")
+    items = [(RED, "ALERT", "Heart failure readmissions are 66%, more than double the overall rate. Review the discharge pathway."),
+             (ORANGE, "PLAN", f"Peak 2025 demand ~{S['forecast_peak']['value']:,} admissions ({S['forecast_peak']['month'].split()[0]}); about {S['beds_needed_peak_forecast']} beds needed vs {S['beds_needed_2024_peak_actual']} in 2024."),
+             (BLUE, "WATCH", f"Admissions are up {S['growth_2019_2024_pct']}% since 2019; the winter peak runs about {(idx.max() / idx.min() - 1) * 100:.0f}% above the summer low.")]
+    import textwrap
+    yy = y + h - 0.85
+    for col, tag, txt in items:
+        ax.add_patch(Rectangle((x + 0.2, yy - 0.5), 0.08, 0.72, color=col))
+        ax.text(x + 0.42, yy + 0.12, tag, fontsize=8.5, fontweight="bold", color=col, va="center")
+        ax.text(x + 1.15, yy + 0.2, "\n".join(textwrap.wrap(txt, 40)), fontsize=8, color="#303030", va="top", linespacing=1.35)
+        yy -= 0.88
+
+    ax.text(8, 0.04, "MOCK LAYOUT  |  all figures come from simulated data (Weeks 2 and 3)", ha="center", fontsize=9, color=GREY)
+    fig.savefig("images/mock_dashboard.png", dpi=150); plt.close(fig)
+    print("seasonal index range:", round(idx.min(), 1), round(idx.max(), 1))
+
+
+wireframe()
+mock()
+print("done")
